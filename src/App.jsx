@@ -258,6 +258,168 @@ function SummaryView({ reports, approvals }) {
   );
 }
 
+/* ── Print All ── */
+function printAll(reports, approvals) {
+  const ts = new Date().toLocaleString("en-GB", {
+    day:"2-digit", month:"short", year:"numeric", hour:"2-digit", minute:"2-digit"
+  });
+
+  // Build summary stats
+  const allC = counts(reports);
+  const overallPct = reports.length ? Math.round(allC._onTrackEff/reports.length*100) : 0;
+
+  const deptRows = DEPTS.map(dept => {
+    const rs = reports.filter(r => r.dept === dept);
+    const c = counts(rs);
+    const pct = rs.length ? Math.round(c._onTrackEff/rs.length*100) : 0;
+    return { dept, total:rs.length, ...c, pct };
+  });
+
+  const statusColor = { "On-Track":"#2D5A0E", "Risk of delay":"#7A4A08", "High risk":"#8B2020", "No activities":"#4A4944" };
+  const statusBg = { "On-Track":"#EAF3DE", "Risk of delay":"#FAEEDA", "High risk":"#FCEBEB", "No activities":"#F1EFE8" };
+
+  // Build full HTML for each department
+  const deptSections = DEPTS.map(dept => {
+    const rs = reports.filter(r => r.dept === dept);
+    if (!rs.length) return "";
+    const c = counts(rs);
+    let seq = 0;
+    const rows = rs.map(r => {
+      seq++;
+      const sc = statusColor[r.status] || "#333";
+      const sb = statusBg[r.status] || "#fff";
+      return `
+        <tr>
+          <td style="padding:5px 6px;border-bottom:1px solid #e0e0e0;color:#888;font-size:10px;">${seq}</td>
+          <td style="padding:5px 6px;border-bottom:1px solid #e0e0e0;">
+            <div style="font-weight:500;font-size:11px;line-height:1.3;">${r.displayName || r.nameEN || r.nameTH || "—"}</div>
+            ${r.nameTH && r.nameTH !== r.displayName ? `<div style="font-size:9px;color:#888;margin-top:2px;">${r.nameTH}</div>` : ""}
+            <div style="font-size:9px;color:#999;margin-top:1px;">${r.regulator || "—"}</div>
+          </td>
+          <td style="padding:5px 6px;border-bottom:1px solid #e0e0e0;font-size:10px;color:#555;">${r.frequency || "—"}</td>
+          <td style="padding:5px 6px;border-bottom:1px solid #e0e0e0;font-size:10px;">${r.deadline || "—"}</td>
+          <td style="padding:5px 6px;border-bottom:1px solid #e0e0e0;font-size:10px;">${r.lastSubmit || "—"}</td>
+          <td style="padding:5px 6px;border-bottom:1px solid #e0e0e0;font-size:10px;">${r.expiry || "—"}</td>
+          <td style="padding:5px 6px;border-bottom:1px solid #e0e0e0;">
+            <span style="padding:2px 7px;border-radius:10px;font-size:9px;font-weight:500;background:${sb};color:${sc};">${r.status}</span>
+          </td>
+          <td style="padding:5px 6px;border-bottom:1px solid #e0e0e0;font-size:10px;color:#777;">${r.responsible || "—"}</td>
+          <td style="padding:5px 6px;border-bottom:1px solid #e0e0e0;font-size:10px;color:#777;">${r.contact || "—"}</td>
+          <td style="padding:5px 6px;border-bottom:1px solid #e0e0e0;font-size:9px;color:#888;">${r.updatedDate || "—"}</td>
+          <td style="padding:5px 6px;border-bottom:1px solid #e0e0e0;font-size:9px;color:#666;max-width:140px;">${r.remark || ""}</td>
+        </tr>`;
+    }).join("");
+
+    return `
+      <div style="page-break-before:always;padding-top:18px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <div>
+            <div style="font-size:15px;font-weight:600;color:#111;">${dept}</div>
+            <div style="font-size:10px;color:#888;margin-top:2px;">${rs.length} reports · On-Track: ${c["On-Track"]} · Risk: ${c["Risk of delay"]} · High risk: ${c["High risk"]} · No activities: ${c["No activities"]} · ${c.pct || Math.round(c._onTrackEff/rs.length*100)}% compliant</div>
+          </div>
+        </div>
+        <table style="width:100%;border-collapse:collapse;font-size:10px;border:1px solid #ddd;">
+          <thead>
+            <tr style="background:#f5f5f3;">
+              <th style="padding:5px 6px;text-align:left;font-size:9px;color:#666;border-bottom:1px solid #ddd;white-space:nowrap;">#</th>
+              <th style="padding:5px 6px;text-align:left;font-size:9px;color:#666;border-bottom:1px solid #ddd;">Report Name</th>
+              <th style="padding:5px 6px;text-align:left;font-size:9px;color:#666;border-bottom:1px solid #ddd;white-space:nowrap;">Frequency</th>
+              <th style="padding:5px 6px;text-align:left;font-size:9px;color:#666;border-bottom:1px solid #ddd;">Deadline</th>
+              <th style="padding:5px 6px;text-align:left;font-size:9px;color:#666;border-bottom:1px solid #ddd;white-space:nowrap;">Last Submit</th>
+              <th style="padding:5px 6px;text-align:left;font-size:9px;color:#666;border-bottom:1px solid #ddd;">Expiry</th>
+              <th style="padding:5px 6px;text-align:left;font-size:9px;color:#666;border-bottom:1px solid #ddd;">Status</th>
+              <th style="padding:5px 6px;text-align:left;font-size:9px;color:#666;border-bottom:1px solid #ddd;">Responsible</th>
+              <th style="padding:5px 6px;text-align:left;font-size:9px;color:#666;border-bottom:1px solid #ddd;">Contact</th>
+              <th style="padding:5px 6px;text-align:left;font-size:9px;color:#666;border-bottom:1px solid #ddd;white-space:nowrap;">Updated</th>
+              <th style="padding:5px 6px;text-align:left;font-size:9px;color:#666;border-bottom:1px solid #ddd;">Remark</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+  }).join("");
+
+  const summaryRows = deptRows.map((r,i) => `
+    <tr style="background:${i%2===0?"#fff":"#fafaf8"};">
+      <td style="padding:5px 8px;border-bottom:1px solid #ebebeb;font-weight:500;">${r.dept}</td>
+      <td style="padding:5px 8px;border-bottom:1px solid #ebebeb;text-align:center;">${r.total}</td>
+      <td style="padding:5px 8px;border-bottom:1px solid #ebebeb;text-align:center;color:#2D5A0E;background:#EAF3DE80;">${r["On-Track"]}</td>
+      <td style="padding:5px 8px;border-bottom:1px solid #ebebeb;text-align:center;color:#7A4A08;background:#FAEEDA80;">${r["Risk of delay"]||"—"}</td>
+      <td style="padding:5px 8px;border-bottom:1px solid #ebebeb;text-align:center;color:#8B2020;background:#FCEBEB80;">${r["High risk"]||"—"}</td>
+      <td style="padding:5px 8px;border-bottom:1px solid #ebebeb;text-align:center;color:#4A4944;background:#F1EFE880;">${r["No activities"]||"—"}</td>
+      <td style="padding:5px 8px;border-bottom:1px solid #ebebeb;text-align:center;font-weight:500;">${r.pct}%</td>
+    </tr>`).join("");
+
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8"/>
+<title>SCCC-CLC Statutory Report Status — ${ts}</title>
+<style>
+  * { box-sizing:border-box; }
+  body { font-family: Arial, sans-serif; font-size:11px; margin:20px; color:#222; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  @media print {
+    body { margin:10mm; }
+    .no-break { page-break-inside:avoid; }
+    table { page-break-inside:auto; }
+    tr { page-break-inside:avoid; }
+    thead { display:table-header-group; }
+  }
+</style>
+</head>
+<body>
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;">
+    <div>
+      <div style="font-size:20px;font-weight:700;color:#111;">Statutory Report Status Tracking</div>
+      <div style="font-size:11px;color:#888;margin-top:4px;">SCCC-CLC · ${reports.length} reports · ${DEPTS.length} departments · Generated: ${ts}</div>
+    </div>
+    <div style="text-align:right;font-size:11px;color:#555;">
+      <div>Overall: <strong>${overallPct}%</strong> compliant</div>
+      <div style="margin-top:2px;">On-Track: ${allC["On-Track"]} · Risk: ${allC["Risk of delay"]} · High risk: ${allC["High risk"]} · No activities: ${allC["No activities"]}</div>
+    </div>
+  </div>
+
+  <div class="no-break">
+    <div style="font-size:14px;font-weight:600;margin-bottom:8px;color:#111;">Summary by Department</div>
+    <table style="width:100%;border-collapse:collapse;border:1px solid #ddd;margin-bottom:4px;">
+      <thead>
+        <tr style="background:#f5f5f3;">
+          <th style="padding:6px 8px;text-align:left;font-size:10px;color:#666;border-bottom:1px solid #ddd;">Department</th>
+          <th style="padding:6px 8px;text-align:center;font-size:10px;color:#666;border-bottom:1px solid #ddd;">Total</th>
+          <th style="padding:6px 8px;text-align:center;font-size:10px;color:#2D5A0E;background:#EAF3DE80;border-bottom:1px solid #ddd;">On-Track</th>
+          <th style="padding:6px 8px;text-align:center;font-size:10px;color:#7A4A08;background:#FAEEDA80;border-bottom:1px solid #ddd;">Risk of delay</th>
+          <th style="padding:6px 8px;text-align:center;font-size:10px;color:#8B2020;background:#FCEBEB80;border-bottom:1px solid #ddd;">High risk</th>
+          <th style="padding:6px 8px;text-align:center;font-size:10px;color:#4A4944;background:#F1EFE880;border-bottom:1px solid #ddd;">No activities</th>
+          <th style="padding:6px 8px;text-align:center;font-size:10px;color:#333;border-bottom:1px solid #ddd;">Compliance</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${summaryRows}
+        <tr style="background:#f3f3f0;border-top:2px solid #ccc;font-weight:600;">
+          <td style="padding:6px 8px;border-bottom:1px solid #ddd;">Total (SCCC-CLC)</td>
+          <td style="padding:6px 8px;text-align:center;border-bottom:1px solid #ddd;">${reports.length}</td>
+          <td style="padding:6px 8px;text-align:center;color:#2D5A0E;border-bottom:1px solid #ddd;">${allC["On-Track"]}</td>
+          <td style="padding:6px 8px;text-align:center;color:#7A4A08;border-bottom:1px solid #ddd;">${allC["Risk of delay"]}</td>
+          <td style="padding:6px 8px;text-align:center;color:#8B2020;border-bottom:1px solid #ddd;">${allC["High risk"]}</td>
+          <td style="padding:6px 8px;text-align:center;color:#4A4944;border-bottom:1px solid #ddd;">${allC["No activities"]}</td>
+          <td style="padding:6px 8px;text-align:center;border-bottom:1px solid #ddd;">${overallPct}%</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  ${deptSections}
+</body>
+</html>`;
+
+  const win = window.open("", "_blank");
+  if (!win) { alert("Please allow pop-ups for this site, then click Print again."); return; }
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  setTimeout(() => { win.print(); }, 600);
+}
+
 /* ── Edit Modal ── */
 function EditModal({ report, dept, onSave, onClose }) {
   const isNew = !report?.id;
@@ -382,7 +544,10 @@ Write a professional email body (no subject line). Include:
 English, formal, concise.`;
 
       const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method:"POST", headers:{"Content-Type":"application/json"},
+        method:"POST", headers:{
+          "Content-Type":"application/json",
+          "anthropic-version":"2023-06-01"
+        },
         body: JSON.stringify({ model:"claude-sonnet-4-20250514", max_tokens:1000,
           messages:[{ role:"user", content:prompt }] })
       });
@@ -589,9 +754,9 @@ English, formal, concise.`;
 }
 
 /* ── Settings Modal ── */
-function SettingsModal({ senderEmail, onSave, onClose }) {
+function SettingsModal({ senderEmail, userName, onSave, onSaveName, onClose }) {
   const [email, setEmail] = useState(senderEmail||"");
-  const [name, setName] = useState("");
+  const [name, setName] = useState(userName||"");
   return (
     <Overlay onClose={onClose}>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
@@ -599,27 +764,33 @@ function SettingsModal({ senderEmail, onSave, onClose }) {
         <button onClick={onClose} style={{ background:"none", border:"none", fontSize:20,
           cursor:"pointer", color:"#888" }}>×</button>
       </div>
-      <div style={{ fontSize:fs(), color:"#444", marginBottom:16, lineHeight:1.7,
-        background:"#f0f6ff", border:"1px solid #c5daff", borderRadius:8, padding:"12px 14px" }}>
-        <strong>Corporate email sender</strong><br/>
-        Enter your corporate email address. When you click "Open in Mail app" in the email modal,
-        your default mail client opens pre-filled with your address as sender, all recipients,
-        subject and body ready to review and send.
-      </div>
-      <div style={{ marginBottom:12 }}>
+
+      {/* User name */}
+      <div style={{ marginBottom:16, padding:"12px 14px", background:"#f5f7ff",
+        border:"1px solid #c5daff", borderRadius:8 }}>
+        <div style={{ fontSize:fs(-1), fontWeight:600, color:"#333", marginBottom:8 }}>
+          Your identity (shown on all updates)
+        </div>
         <label style={{ display:"block", fontSize:fs(-1), color:"#666", marginBottom:3 }}>
-          Your corporate email address
+          Your name
         </label>
-        <input type="email" value={email} onChange={e=>setEmail(e.target.value)}
-          placeholder="yourname@company.com"
+        <input type="text" value={name} onChange={e=>setName(e.target.value)}
+          placeholder="e.g. Kazuhisa"
           style={{ width:"100%", boxSizing:"border-box", fontSize:fs(), background:"#fff" }}/>
+      </div>
+
+      {/* Email sender */}
+      <div style={{ fontSize:fs(-1), color:"#444", marginBottom:12, lineHeight:1.6,
+        background:"#f0f6ff", border:"1px solid #c5daff", borderRadius:8, padding:"10px 12px" }}>
+        <strong>Email sender address</strong><br/>
+        Used as the "From" address when composing approval emails.
       </div>
       <div style={{ marginBottom:16 }}>
         <label style={{ display:"block", fontSize:fs(-1), color:"#666", marginBottom:3 }}>
-          Display name (optional)
+          Corporate email address
         </label>
-        <input type="text" value={name} onChange={e=>setName(e.target.value)}
-          placeholder="Compliance Team"
+        <input type="email" value={email} onChange={e=>setEmail(e.target.value)}
+          placeholder="yourname@company.com"
           style={{ width:"100%", boxSizing:"border-box", fontSize:fs(), background:"#fff" }}/>
       </div>
       <div style={{ display:"flex", gap:8, justifyContent:"flex-end" }}>
@@ -628,7 +799,7 @@ function SettingsModal({ senderEmail, onSave, onClose }) {
             border:"1px solid #ddd", color:"#444", borderRadius:6, cursor:"pointer" }}>
           Cancel
         </button>
-        <button onClick={() => { onSave(email, name); onClose(); }}
+        <button onClick={() => { onSave(email); if (name.trim()) onSaveName(name.trim()); onClose(); }}
           style={{ fontSize:fs(), padding:"6px 18px", background:"#1a6fd4", color:"#fff",
             border:"none", fontWeight:500, borderRadius:6, cursor:"pointer" }}>
           Save
@@ -801,6 +972,10 @@ function DeptView({ dept, reports, allReports, onStatusClick, onEdit, onDelete }
                           <div><span style={{ color:"#888" }}>Deadline: </span>{r.deadline||"—"}</div>
                           <div><span style={{ color:"#888" }}>Last submit: </span>{fmt(r.lastSubmit)}</div>
                           <div><span style={{ color:"#888" }}>Expiry: </span>{fmt(r.expiry)}</div>
+                          {r.updatedBy && <div>
+                            <span style={{ color:"#888" }}>Updated by: </span>
+                            <span style={{ color:"#1a6fd4", fontWeight:500 }}>{r.updatedBy}</span>
+                          </div>}
                           {r.remark && <div style={{ gridColumn:"1/-1" }}>
                             <span style={{ color:"#888" }}>Note: </span>{r.remark}
                           </div>}
@@ -818,7 +993,38 @@ function DeptView({ dept, reports, allReports, onStatusClick, onEdit, onDelete }
   );
 }
 
-/* ── Root ── */
+/* ── Name Modal (first visit) ── */
+function NameModal({ onSave }) {
+  const [name, setName] = useState("");
+  return (
+    <Overlay onClose={null}>
+      <div style={{ padding:"28px 24px", minWidth:320 }}>
+        <div style={{ fontSize:fs(3), fontWeight:600, marginBottom:6 }}>Welcome to SCCC-CLC</div>
+        <div style={{ fontSize:fs(-1), color:"#666", marginBottom:18, lineHeight:1.5 }}>
+          Please enter your name so your updates can be attributed correctly across all departments.
+        </div>
+        <input
+          autoFocus
+          value={name}
+          onChange={e => setName(e.target.value)}
+          onKeyDown={e => e.key==="Enter" && name.trim() && onSave(name.trim())}
+          placeholder="Your name (e.g. Kazuhisa)"
+          style={{ width:"100%", padding:"8px 10px", fontSize:fs(), border:"1px solid #ccc",
+            borderRadius:6, boxSizing:"border-box", marginBottom:14, outline:"none" }}
+        />
+        <button
+          onClick={() => name.trim() && onSave(name.trim())}
+          disabled={!name.trim()}
+          style={{ width:"100%", padding:"9px", background: name.trim() ? "#1a6fd4" : "#ccc",
+            color:"#fff", border:"none", borderRadius:6, fontSize:fs(), fontWeight:500,
+            cursor: name.trim() ? "pointer" : "default" }}>
+          Continue
+        </button>
+      </div>
+    </Overlay>
+  );
+}
+
 export default function App() {
   const [reports, setReports] = useState([]);
   const [approvals, setApprovals] = useState([]);
@@ -828,112 +1034,172 @@ export default function App() {
   const [editTarget, setEditTarget] = useState(null);
   const [showEmail, setShowEmail] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [userName, setUserName] = useState("");
+  const [showNameModal, setShowNameModal] = useState(false);
+  const [liveStatus, setLiveStatus] = useState("connecting"); // "connecting" | "live" | "error"
+  const channelRef = useRef(null);
 
-  // Load from Supabase (key-value store via storage API)
+  // localStorage keys (email + username only — data lives in Supabase)
+  const LS_E = "sccc_e_v6";
+  const LS_NAME = "sccc_username_v1";
+  const LS_A = "sccc_a_v6";
+
+  // Merge Supabase overrides onto RAW baseline
+  const applyOverrides = useCallback((overrides) => {
+    const map = {};
+    overrides.forEach(o => { map[o.report_id] = o; });
+    return RAW.map(r => {
+      const o = map[r.id];
+      if (!o) return { ...r };
+      return {
+        ...r,
+        status: o.status ?? r.status,
+        remark: o.remark ?? r.remark,
+        lastSubmit: o.last_submit ?? r.lastSubmit,
+        expiry: o.expiry ?? r.expiry,
+        updatedDate: o.updated_date ?? r.updatedDate,
+        updatedBy: o.updated_by ?? "",
+      };
+    });
+  }, []);
+
+  // Initial load: fetch all overrides from Supabase + set up realtime
   useEffect(() => {
+    const name = localStorage.getItem(LS_NAME) || "";
+    const email = localStorage.getItem(LS_E) || "";
+    const savedApprovals = localStorage.getItem(LS_A);
+    setUserName(name);
+    setSenderEmail(email);
+    setApprovals(savedApprovals ? JSON.parse(savedApprovals) : []);
+    if (!name) setShowNameModal(true);
+
+    // Fetch current state from Supabase
     (async () => {
       try {
-        const rRes = await window.storage?.get("sccc_reports");
-        const aRes = await window.storage?.get("sccc_approvals");
-        const eRes = await window.storage?.get("sccc_sender");
-        setReports(rRes?.value ? JSON.parse(rRes.value) : RAW.map(r => ({ ...r })));
-        setApprovals(aRes?.value ? JSON.parse(aRes.value) : []);
-        setSenderEmail(eRes?.value || "");
+        const { data, error } = await supabase.from("report_statuses").select("*");
+        if (error) throw error;
+        setReports(applyOverrides(data || []));
       } catch {
-        // Fallback to localStorage if storage API unavailable
-        try {
-          const s = localStorage.getItem("sccc_r_v5");
-          const a = localStorage.getItem("sccc_a_v5");
-          const e = localStorage.getItem("sccc_sender_v5");
-          setReports(s ? JSON.parse(s) : RAW.map(r => ({ ...r })));
-          setApprovals(a ? JSON.parse(a) : []);
-          setSenderEmail(e || "");
-        } catch {
-          setReports(RAW.map(r=>({...r})));
-        }
+        // Supabase unreachable — fall back to RAW
+        setReports(RAW.map(r => ({ ...r })));
+        setLiveStatus("error");
       }
       setLoaded(true);
     })();
+
+    // Subscribe to realtime changes
+    const channel = supabase
+      .channel("report_statuses_changes")
+      .on("postgres_changes",
+        { event: "*", schema: "public", table: "report_statuses" },
+        payload => {
+          setReports(prev => {
+            if (payload.eventType === "DELETE") {
+              // Restore to RAW baseline for deleted row
+              const raw = RAW.find(r => r.id === payload.old.report_id);
+              if (!raw) return prev;
+              return prev.map(r => r.id === raw.id ? { ...raw } : r);
+            }
+            const o = payload.new;
+            return prev.map(r =>
+              r.id === o.report_id
+                ? { ...r,
+                    status: o.status ?? r.status,
+                    remark: o.remark ?? r.remark,
+                    lastSubmit: o.last_submit ?? r.lastSubmit,
+                    expiry: o.expiry ?? r.expiry,
+                    updatedDate: o.updated_date ?? r.updatedDate,
+                    updatedBy: o.updated_by ?? "",
+                  }
+                : r
+            );
+          });
+        }
+      )
+      .subscribe(status => {
+        if (status === "SUBSCRIBED") setLiveStatus("live");
+        else if (status === "CLOSED" || status === "CHANNEL_ERROR") setLiveStatus("error");
+      });
+
+    channelRef.current = channel;
+    return () => { supabase.removeChannel(channel); };
+  }, [applyOverrides]);
+
+  // Upsert a single report override to Supabase
+  const upsertToSupabase = useCallback(async (report, overrideFields) => {
+    const row = {
+      report_id: report.id,
+      status: overrideFields.status ?? report.status,
+      remark: overrideFields.remark ?? report.remark,
+      last_submit: overrideFields.lastSubmit ?? report.lastSubmit,
+      expiry: overrideFields.expiry ?? report.expiry,
+      updated_date: today(),
+      updated_by: userName || "Unknown",
+      updated_at: new Date().toISOString(),
+    };
+    try {
+      await supabase.from("report_statuses").upsert(row, { onConflict: "report_id" });
+    } catch { /* silent — optimistic update already applied */ }
+  }, [userName]);
+
+  const pA = useCallback(d => {
+    try { localStorage.setItem(LS_A, JSON.stringify(d)); } catch {}
   }, []);
 
-  const pR = useCallback(async d => {
-    try { await window.storage?.set("sccc_reports", JSON.stringify(d)); } catch {}
-    try { localStorage.setItem("sccc_r_v5", JSON.stringify(d)); } catch {}
+  const pE = useCallback(v => {
+    try { localStorage.setItem(LS_E, v); } catch {}
   }, []);
 
-  const pA = useCallback(async d => {
-    try { await window.storage?.set("sccc_approvals", JSON.stringify(d)); } catch {}
-    try { localStorage.setItem("sccc_a_v5", JSON.stringify(d)); } catch {}
-  }, []);
-
-  const pE = useCallback(async v => {
-    try { await window.storage?.set("sccc_sender", v); } catch {}
-    try { localStorage.setItem("sccc_sender_v5", v); } catch {}
-  }, []);
-
-  const updateR = next => { setReports(next); pR(next); };
-  const updateA = next => { setApprovals(next); pA(next); };
-
-  // Always stamp today — even if same status selected
+  // Optimistic update + Supabase upsert
   const handleStatusClick = (id, status) => {
-    updateR(reports.map(r => r.id===id ? { ...r, status, updatedDate:today() } : r));
+    const report = reports.find(r => r.id === id);
+    if (!report) return;
+    const updated = { ...report, status, updatedDate: today(), updatedBy: userName };
+    setReports(prev => prev.map(r => r.id === id ? updated : r));
+    upsertToSupabase(report, { status });
   };
 
-  const handleSave = form => {
+  const handleSave = async form => {
     if (!form.id) {
-      updateR([...reports, { ...form, id:Date.now() }]);
+      // New report — local only (no Supabase row needed until status changes)
+      setReports(prev => [...prev, { ...form, id: Date.now() }]);
     } else {
-      updateR(reports.map(r => r.id===form.id
-        ? { ...form, displayName:form.nameEN||form.nameTH } : r));
+      const updated = { ...form, displayName: form.nameEN || form.nameTH, updatedBy: userName, updatedDate: today() };
+      setReports(prev => prev.map(r => r.id === form.id ? updated : r));
+      upsertToSupabase(form, {
+        status: form.status, remark: form.remark,
+        lastSubmit: form.lastSubmit, expiry: form.expiry,
+      });
     }
     setEditTarget(null);
   };
 
   const handleDelete = id => {
-    updateR(reports.filter(r => r.id !== id));
+    setReports(prev => prev.filter(r => r.id !== id));
   };
 
   const handleSendComplete = newApprovals => {
-    updateA(newApprovals);
+    setApprovals(newApprovals); pA(newApprovals);
     setShowEmail(false);
   };
 
-  const handleSaveSender = (email) => {
+  const handleSaveSender = email => {
     setSenderEmail(email); pE(email);
+  };
+
+  const handleSaveName = name => {
+    setUserName(name);
+    localStorage.setItem(LS_NAME, name);
+    setShowNameModal(false);
   };
 
   const deptReports = tab==="__summary__" ? reports : reports.filter(r=>r.dept===tab);
   const allC = counts(reports);
   const overallPct = reports.length ? Math.round(allC._onTrackEff/reports.length*100) : 0;
 
-  // Inject print CSS once
-  useEffect(() => {
-    const id = "sccc-print-styles";
-    if (!document.getElementById(id)) {
-      const style = document.createElement("style");
-      style.id = id;
-      style.textContent = `
-        @media print {
-          body { margin: 0; font-size: 11px; }
-          button, select { display: none !important; }
-          input[type="text"], input[type="email"] { display: none !important; }
-          [data-no-print] { display: none !important; }
-          .sr-only { display: none !important; }
-          table { page-break-inside: auto; }
-          tr { page-break-inside: avoid; page-break-after: auto; }
-          thead { display: table-header-group; }
-          tfoot { display: table-footer-group; }
-          div[style*="position:fixed"] { display: none !important; }
-          * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-        }
-      `;
-      document.head.appendChild(style);
-    }
-  }, []);
-
   if (!loaded) return (
     <div style={{ padding:40, fontSize:fs(), color:"#888", textAlign:"center" }}>
-      Loading…
+      Connecting to shared database…
     </div>
   );
 
@@ -941,15 +1207,31 @@ export default function App() {
     <div style={{ fontFamily:"var(--font-sans)", padding:"14px 18px", maxWidth:980, fontSize:fs() }}>
       <h2 className="sr-only">SCCC-CLC Statutory Report Status Tracking</h2>
 
+      {/* Name Modal */}
+      {showNameModal && <NameModal onSave={handleSaveName} />}
+
       {/* Header */}
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start",
         marginBottom:12, flexWrap:"wrap", gap:8 }}>
         <div>
-          <div style={{ fontSize:fs(4), fontWeight:500, color:"#111" }}>
-            Statutory Report Status Tracking
+          <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+            <div style={{ fontSize:fs(4), fontWeight:500, color:"#111" }}>
+              Statutory Report Status Tracking
+            </div>
+            {/* Live indicator */}
+            <div style={{ display:"flex", alignItems:"center", gap:4, fontSize:fs(-2),
+              padding:"2px 7px", borderRadius:10,
+              background: liveStatus==="live" ? "#EAF3DE" : liveStatus==="error" ? "#FCEBEB" : "#F1EFE8",
+              color: liveStatus==="live" ? "#2D5A0E" : liveStatus==="error" ? "#8B2020" : "#4A4944",
+              fontWeight:500 }}>
+              <span style={{ width:6, height:6, borderRadius:"50%", display:"inline-block",
+                background: liveStatus==="live" ? "#639922" : liveStatus==="error" ? "#E24B4A" : "#888780" }}/>
+              {liveStatus==="live" ? "Live" : liveStatus==="error" ? "Offline" : "Connecting…"}
+            </div>
           </div>
           <div style={{ fontSize:fs(-1), color:"#888", marginTop:2 }}>
             SCCC-CLC · {reports.length} reports · {DEPTS.length} departments
+            {userName && <span> · Signed in as <strong>{userName}</strong></span>}
           </div>
         </div>
         <div style={{ display:"flex", gap:6, flexWrap:"wrap", alignItems:"center" }}>
@@ -958,7 +1240,7 @@ export default function App() {
               border:"1px solid #ddd", color:"#555", borderRadius:6, cursor:"pointer" }}>
             ⚙ Settings
           </button>
-          <button onClick={() => window.print()}
+          <button onClick={() => printAll(reports, approvals)}
             style={{ fontSize:fs(-1), padding:"5px 11px", background:"#f5f5f5",
               border:"1px solid #ddd", color:"#555", borderRadius:6, cursor:"pointer" }}>
             🖨 Print
@@ -1062,7 +1344,9 @@ export default function App() {
       {showSettings && (
         <SettingsModal
           senderEmail={senderEmail}
+          userName={userName}
           onSave={handleSaveSender}
+          onSaveName={n => { setUserName(n); localStorage.setItem(LS_NAME, n); }}
           onClose={() => setShowSettings(false)}
         />
       )}
