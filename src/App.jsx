@@ -516,44 +516,53 @@ function EmailModal({ reports, approvals, senderEmail, onClose, onSendComplete }
   const generate = async () => {
     setLoading(true); setBody("");
     try {
-      const summary = reports.map(r =>
-        `[${DEPT_SHORT[r.dept]||r.dept}|#${r._seq||r.no}] ${r.displayName} | ${r.status}${r.remark?" | "+r.remark:""}`
-      ).join("\n");
       const attnList = attn.length
         ? attn.map(r=>`- [${r.dept}] ${r.displayName} → ${r.status}${r.remark?" ("+r.remark+")":""}`).join("\n")
         : "None — all active reports are On-Track or No activities.";
 
-      const prompt = `Write a statutory compliance approval email.
+      // Keep prompt concise — skip full 331-report list to stay within limits
+      const prompt = `Write a statutory compliance approval email for SCCC-CLC.
 
-From: ${senderEmail||"compliance@company.com"}
+Sender: ${senderEmail||"compliance@company.com"}
 Date: ${today()}
-Company: SCCC-CLC
-Reports: ${reports.length} total | On-Track: ${c["On-Track"]} | No activities: ${c["No activities"]} | Risk of delay: ${c["Risk of delay"]} | High risk: ${c["High risk"]}
+Total reports: ${reports.length} | On-Track: ${c["On-Track"]} | Risk of delay: ${c["Risk of delay"]} | High risk: ${c["High risk"]} | No activities: ${c["No activities"]}
 
-Items needing attention:
+Items needing attention (${attn.length} total):
 ${attnList}
 
-Full report list:
-${summary}
-
-Write a professional email body (no subject line). Include:
-1. Brief compliance status summary (2–3 sentences)  
-2. Items needing attention if any
-3. Clear instruction: reply with "APPROVE" or "REJECT [reason]" — responses recorded in compliance system
-4. Sign-off from Compliance Team / ${senderEmail||"compliance@company.com"}
-English, formal, concise.`;
+Write a professional email body only (no subject line). Include:
+1. Overall compliance status summary (2-3 sentences)
+2. List of items needing attention with department context
+3. Request recipients reply "APPROVE" or "REJECT [reason]"
+4. Sign-off from Compliance Team, ${senderEmail||"compliance@company.com"}
+Keep it formal, concise, under 300 words.`;
 
       const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method:"POST", headers:{
-          "Content-Type":"application/json",
-          "anthropic-version":"2023-06-01"
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "anthropic-version": "2023-06-01",
         },
-        body: JSON.stringify({ model:"claude-sonnet-4-20250514", max_tokens:1000,
-          messages:[{ role:"user", content:prompt }] })
+        body: JSON.stringify({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 1024,
+          messages: [{ role: "user", content: prompt }]
+        })
       });
+
+      if (!res.ok) {
+        const err = await res.text();
+        setBody(`API error (${res.status}): ${err.slice(0, 200)}`);
+        setLoading(false);
+        return;
+      }
+
       const data = await res.json();
-      setBody(data.content?.[0]?.text || "Error generating email.");
-    } catch { setBody("Connection error. Please try again."); }
+      const text = data.content?.map(b => b.text || "").join("") || "";
+      setBody(text || "No response generated. Please try again.");
+    } catch(e) {
+      setBody(`Connection error: ${e.message || "Please try again."}`);
+    }
     setLoading(false);
   };
 
