@@ -104,7 +104,7 @@ function Overlay({ onClose, children, wide }) {
 }
 
 /* ── Summary ── */
-function SummaryView({ reports, approvals }) {
+function SummaryView({ reports }) {
   const deptRows = DEPTS.map(dept => {
     const rs = reports.filter(r => r.dept === dept);
     const c = counts(rs);
@@ -215,51 +215,14 @@ function SummaryView({ reports, approvals }) {
         </table>
       </div>
 
-      {/* Approvals */}
-      {approvals.length>0 && (
-        <div style={{ marginTop:22 }}>
-          <div style={{ fontSize:fs(1), fontWeight:500, marginBottom:10, color:"#111" }}>
-            Approval responses
-          </div>
-          <div style={cardBase}>
-            <table style={{ width:"100%", borderCollapse:"collapse", fontSize:fs() }}>
-              <thead>
-                <tr>
-                  {["Approver","Response","Time","Comment"].map(h => (
-                    <th key={h} style={{ ...thStyle, textAlign:"left" }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {approvals.map((a,i) => (
-                  <tr key={i} style={{ background:i%2===0?"#fff":"#fafaf8", borderBottom:"0.5px solid #ebebeb" }}>
-                    <td style={{ ...tdStyle, fontWeight:500 }}>{a.email}</td>
-                    <td style={{ ...tdStyle }}>
-                      <span style={{ display:"inline-flex", alignItems:"center", gap:4,
-                        fontSize:fs(-1), padding:"2px 8px", borderRadius:20, fontWeight:500,
-                        background:a.response==="Approved"?"#EAF3DE":a.response==="Rejected"?"#FCEBEB":"#F1EFE8",
-                        color:a.response==="Approved"?"#2D5A0E":a.response==="Rejected"?"#8B2020":"#4A4944" }}>
-                        {a.response==="Approved"?"✓ Approved":a.response==="Rejected"?"✗ Rejected":"⏳ Pending"}
-                      </span>
-                    </td>
-                    <td style={{ ...tdStyle, color:"#777" }}>{a.respondedAt||"—"}</td>
-                    <td style={{ ...tdStyle, color:"#555" }}>{a.comment||"—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <div style={{ marginTop:6, fontSize:fs(-1), color:"#888" }}>
-            {approvals.filter(a=>a.response==="Approved").length} of {approvals.length} approved
-          </div>
-        </div>
-      )}
+      {/* Approver List */}
+      <ApproverGrid />
     </div>
   );
 }
 
 /* ── Print All ── */
-function printAll(reports, approvals) {
+function printAll(reports) {
   const ts = new Date().toLocaleString("en-GB", {
     day:"2-digit", month:"short", year:"numeric", hour:"2-digit", minute:"2-digit"
   });
@@ -495,272 +458,169 @@ function EditModal({ report, dept, onSave, onClose }) {
   );
 }
 
-/* ── Email Modal ── */
-function EmailModal({ reports, approvals, senderEmail, onClose, onSendComplete }) {
-  const [recipients, setRecipients] = useState(
-    approvals.map(a=>a.email).join("\n")
-  );
-  const [subject, setSubject] = useState(
-    "Statutory Report Status Update — Action Required"
-  );
-  const [body, setBody] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [sent, setSent] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const copyRef = useRef(null);
 
-  const c = counts(reports);
-  const attn = reports.filter(r => r.status==="Risk of delay"||r.status==="High risk");
-  const emailList = () => recipients.split(/[\n,;]+/).map(e=>e.trim()).filter(Boolean);
+/* ── Approver Grid ── */
+const DEFAULT_APPROVERS = [
+  { name:"Khun Nunta chai Srinapawong",  title:"Plant 2 Manager" },
+  { name:"Khun Wiboon Sae-Lo",           title:"Plant 3 Manager" },
+  { name:"Khun Sarit Sangon",            title:"Sr. Technical Manager" },
+  { name:"Khun Natthapong Promajakarin", title:"Quarry & Geology Department Manager" },
+  { name:"Khun Chanaphat Kitsakul",      title:"Head of OH&S and Operational Compliance - Thailand" },
+  { name:"Khun Piman Par-Ngam",          title:"Head of Corporate Affairs" },
+  { name:"Khun Porrameth Nitayavardhana",title:"Head of Business Solution (B2C)" },
+  { name:"Khun Thanawan Sesthapongvanich",title:"Head of Marketing Communications and Customer Experience" },
+  { name:"Khun Wonchalerm Chalodhorn",   title:"Head of Product & Technical Solutions" },
+  { name:"Khun Unravee Chowprasert",     title:"Head of Logistics" },
+  { name:"Khun Nicha Wanchana",          title:"Accounting and Group Consolidation Department Manager" },
+  { name:"Khun Sattaya Pooncharoen",     title:"Treasury, Corporate Finance & IR" },
+  { name:"Khun Sikarin Kanoksikarin",    title:"Controller Department Manager – SCCC, SCP & IECO" },
+  { name:"Khun Suwinna Ekkawat",         title:"Head of HR Shared Services" },
+  { name:"Khun Puttiphong Subin",        title:"Head of HR – Saraburi Manufacturing & Labour Relations" },
+  { name:"Khun Worawat Supagovit",       title:"VP Finance" },
+  { name:"Khun Sitthichai Sriuvithtaya", title:"SVP - Commercial" },
+  { name:"Khun Serefin Bugeja",          title:"SVP (Saraburi Operation)" },
+  { name:"Khun Duangporn Boosarawongse", title:"Chief Human Resources Officer Thailand" },
+  { name:"Khun Montri Nithikul",         title:"Chief Executive Officer" },
+];
 
-  const generate = async () => {
-    setLoading(true); setBody("");
+const LS_APPROVERS = "sccc_approvers_v1";
+
+function ApproverGrid() {
+  const [approvers, setApprovers] = useState(() => {
     try {
-      const attnList = attn.length
-        ? attn.map(r=>`- [${r.dept}] ${r.displayName} → ${r.status}${r.remark?" ("+r.remark+")":""}`).join("\n")
-        : "None — all active reports are On-Track or No activities.";
+      const s = localStorage.getItem(LS_APPROVERS);
+      return s ? JSON.parse(s) : DEFAULT_APPROVERS.map(a => ({ ...a }));
+    } catch { return DEFAULT_APPROVERS.map(a => ({ ...a })); }
+  });
+  const [editing, setEditing] = useState(null); // index or null
+  const [editForm, setEditForm] = useState({ name:"", title:"" });
+  const [editMode, setEditMode] = useState(false);
 
-      // Keep prompt concise — skip full 331-report list to stay within limits
-      const prompt = `Write a statutory compliance approval email for SCCC-CLC.
-
-Sender: ${senderEmail||"compliance@company.com"}
-Date: ${today()}
-Total reports: ${reports.length} | On-Track: ${c["On-Track"]} | Risk of delay: ${c["Risk of delay"]} | High risk: ${c["High risk"]} | No activities: ${c["No activities"]}
-
-Items needing attention (${attn.length} total):
-${attnList}
-
-Write a professional email body only (no subject line). Include:
-1. Overall compliance status summary (2-3 sentences)
-2. List of items needing attention with department context
-3. Request recipients reply "APPROVE" or "REJECT [reason]"
-4. Sign-off from Compliance Team, ${senderEmail||"compliance@company.com"}
-Keep it formal, concise, under 300 words.`;
-
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "anthropic-version": "2023-06-01",
-        },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 1024,
-          messages: [{ role: "user", content: prompt }]
-        })
-      });
-
-      if (!res.ok) {
-        const err = await res.text();
-        setBody(`API error (${res.status}): ${err.slice(0, 200)}`);
-        setLoading(false);
-        return;
-      }
-
-      const data = await res.json();
-      const text = data.content?.map(b => b.text || "").join("") || "";
-      setBody(text || "No response generated. Please try again.");
-    } catch(e) {
-      setBody(`Connection error: ${e.message || "Please try again."}`);
-    }
-    setLoading(false);
+  const save = (updated) => {
+    setApprovers(updated);
+    try { localStorage.setItem(LS_APPROVERS, JSON.stringify(updated)); } catch {}
   };
 
-  const handleSend = () => {
-    const emails = emailList();
-    if (!emails.length) { alert("Please enter at least one recipient."); return; }
-    const newApprovals = emails.map(email => ({
-      email, response:"Pending", respondedAt:null, comment:null,
-    }));
-    onSendComplete(newApprovals);
-    setSent(true);
+  const openEdit = (i) => {
+    setEditing(i);
+    setEditForm({ name: approvers[i].name, title: approvers[i].title });
   };
 
-  const openMailto = () => {
-    const emails = emailList();
-    if (!emails.length) return;
-    const mailto = `mailto:${emails.join(",")}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-    window.open(mailto);
+  const confirmEdit = () => {
+    if (editing === null) return;
+    const updated = approvers.map((a, i) => i === editing ? { ...editForm } : a);
+    save(updated);
+    setEditing(null);
   };
 
-  const copy = () => {
-    const el = copyRef.current;
-    if (!el) return;
-    el.value = `Subject: ${subject}\n\n${body}`;
-    el.style.display = "block";
-    el.select();
-    el.setSelectionRange(0, 99999);
-    try {
-      document.execCommand("copy");
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2500);
-    } catch {}
-    el.style.display = "none";
+  const resetDefaults = () => {
+    save(DEFAULT_APPROVERS.map(a => ({ ...a })));
   };
 
-  if (sent) return (
-    <Overlay onClose={onClose}>
-      <div style={{ textAlign:"center", padding:"24px 0", fontSize:fs() }}>
-        <div style={{ fontSize:44, marginBottom:14 }}>✓</div>
-        <div style={{ fontSize:fs(3), fontWeight:500, marginBottom:10 }}>Approval requests logged</div>
-        <div style={{ fontSize:fs(), color:"#666", marginBottom:24, lineHeight:1.7 }}>
-          {emailList().length} recipients added to approval tracking.<br/>
-          Open your email client and send the copied email — replies<br/>
-          can be recorded manually in the Summary tab.
-        </div>
-        <button onClick={onClose}
-          style={{ background:"#1a6fd4", color:"#fff", border:"none", fontWeight:500,
-            padding:"8px 22px", borderRadius:8, cursor:"pointer", fontSize:fs() }}>
-          Done
-        </button>
-      </div>
-    </Overlay>
-  );
+  // 10 columns, 2 rows
+  const rows = [approvers.slice(0, 10), approvers.slice(10, 20)];
 
   return (
-    <Overlay onClose={onClose} wide>
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
-        <div style={{ fontSize:fs(2), fontWeight:500, color:"#111" }}>Send approval request</div>
-        <button onClick={onClose} style={{ background:"none", border:"none", fontSize:20,
-          cursor:"pointer", color:"#888" }}>×</button>
-      </div>
-
-      {attn.length>0 && (
-        <div style={{ background:"#FAEEDA", border:"1px solid #FAC775", borderRadius:8,
-          padding:"9px 13px", marginBottom:14, fontSize:fs(), color:"#7A4A08" }}>
-          ⚠ {attn.length} report(s) need attention — included in email
-        </div>
-      )}
-
-      {/* Status strip */}
-      <div style={{ display:"flex", gap:7, marginBottom:16, flexWrap:"wrap" }}>
-        {ST.map(s => (
-          <span key={s} style={{ fontSize:fs(-1), padding:"3px 9px", borderRadius:20,
-            background:SC[s].bg, color:SC[s].c, border:`0.5px solid ${SC[s].bd}`, fontWeight:500 }}>
-            {c[s]} {s}
-          </span>
-        ))}
-      </div>
-
-      {/* Sender */}
-      <div style={{ marginBottom:12, padding:"10px 13px", background:"#f0f6ff",
-        border:"1px solid #c5daff", borderRadius:8, fontSize:fs() }}>
-        <span style={{ color:"#666" }}>Sending from: </span>
-        <span style={{ fontWeight:500, color:"#1a4a8a" }}>{senderEmail||"(not set — configure in Settings)"}</span>
-      </div>
-
-      {/* Recipients */}
-      <div style={{ marginBottom:12 }}>
-        <label style={{ display:"block", fontSize:fs(-1), color:"#666", marginBottom:3 }}>
-          Recipients — one per line or comma separated (up to 25)
-        </label>
-        <textarea value={recipients} onChange={e=>setRecipients(e.target.value)} rows={5}
-          placeholder={"approver1@company.com\napprover2@company.com\n..."}
-          style={{ width:"100%", boxSizing:"border-box", background:"#fff",
-            fontFamily:"var(--font-mono)", fontSize:fs(-1) }}/>
-        <div style={{ fontSize:10, color:"#888", marginTop:3 }}>
-          {emailList().length} recipients
-        </div>
-      </div>
-
-      {/* Subject */}
-      <div style={{ marginBottom:12 }}>
-        <label style={{ display:"block", fontSize:fs(-1), color:"#666", marginBottom:3 }}>Subject</label>
-        <input value={subject} onChange={e=>setSubject(e.target.value)}
-          style={{ width:"100%", boxSizing:"border-box", fontSize:fs(), background:"#fff" }}/>
-      </div>
-
-      {/* Generate + actions */}
-      <div style={{ display:"flex", gap:8, marginBottom:12, flexWrap:"wrap" }}>
-        <button onClick={generate} disabled={loading}
-          style={{ fontSize:fs(), padding:"6px 14px", background:"#1a6fd4", color:"#fff",
-            border:"none", fontWeight:500, borderRadius:6, cursor:"pointer" }}>
-          {loading?"Generating…":"Generate email body ↗"}
-        </button>
-        {body && <>
-          {/* hidden textarea used as copy buffer */}
-          <textarea ref={copyRef} readOnly
-            style={{ position:"fixed", top:-9999, left:-9999, display:"none",
-              opacity:0, width:1, height:1 }}/>
-          <button onClick={copy}
-            style={{ fontSize:fs(), padding:"6px 13px", borderRadius:6, cursor:"pointer",
-              background: copied?"#EAF3DE":"#fff",
-              color: copied?"#2D5A0E":"#333",
-              border: copied?"1px solid #C0DD97":"1px solid #ddd",
-              fontWeight: copied?500:400 }}>
-            {copied ? "✓ Copied!" : "Copy email"}
+    <div style={{ marginTop:24 }}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
+        <div style={{ fontSize:fs(1), fontWeight:500, color:"#111" }}>Approver List</div>
+        <div style={{ display:"flex", gap:6 }}>
+          <button
+            onClick={() => setEditMode(e => !e)}
+            style={{ fontSize:fs(-1), padding:"4px 12px", borderRadius:6, cursor:"pointer",
+              background: editMode ? "#1a6fd4" : "#f5f5f5",
+              color: editMode ? "#fff" : "#555",
+              border: editMode ? "none" : "1px solid #ddd", fontWeight:500 }}>
+            {editMode ? "✓ Done editing" : "✏ Edit names"}
           </button>
-          <button onClick={openMailto}
-            style={{ fontSize:fs(), padding:"6px 13px", background:"#fff",
-              border:"1px solid #1a6fd4", color:"#1a6fd4", borderRadius:6, cursor:"pointer", fontWeight:500 }}>
-            Open in Mail app ↗
-          </button>
-        </>}
+          {editMode && (
+            <button onClick={resetDefaults}
+              style={{ fontSize:fs(-1), padding:"4px 11px", borderRadius:6, cursor:"pointer",
+                background:"#fff", border:"1px solid #ddd", color:"#888" }}>
+              Reset to default
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Body */}
-      {body && (
-        <div style={{ marginBottom:14 }}>
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:3 }}>
-            <label style={{ fontSize:fs(-1), color:"#666" }}>Email body (editable)</label>
-            <span style={{ fontSize:10, color:"#999" }}>Click inside → Ctrl+A / Cmd+A to select all, then Ctrl+C / Cmd+C to copy</span>
-          </div>
-          <textarea value={body} onChange={e=>setBody(e.target.value)} rows={11}
-            onClick={e => { e.target.select(); }}
-            style={{ width:"100%", boxSizing:"border-box", background:"#fff",
-              fontSize:fs(), lineHeight:1.7, fontFamily:"inherit" }}/>
-        </div>
-      )}
-
-      {/* Simulate responses */}
-      {body && (
-        <div style={{ background:"#f7f7f5", border:"1px solid #e0e0e0", borderRadius:10,
-          padding:"14px 16px", marginBottom:16 }}>
-          <div style={{ fontSize:fs(), fontWeight:500, color:"#333", marginBottom:5 }}>
-            Simulate approval responses
-          </div>
-          <div style={{ fontSize:fs(-1), color:"#777", marginBottom:10 }}>
-            Test the approval tracking flow — responses appear in the Summary tab.
-          </div>
-          <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-            <button onClick={() => {
-              const mocks = emailList().map(email => ({
-                email, response:"Approved", respondedAt:nowTs(), comment:"Approved"
-              }));
-              onSendComplete(mocks); setSent(true);
-            }} style={{ fontSize:fs(-1), padding:"5px 12px", background:"#EAF3DE",
-              color:"#2D5A0E", border:"1px solid #C0DD97", borderRadius:6, cursor:"pointer" }}>
-              ✓ All approve
-            </button>
-            <button onClick={() => {
-              const mocks = emailList().map((email,i) => ({
-                email, response:i%4===0?"Rejected":"Approved",
-                respondedAt:nowTs(), comment:i%4===0?"Needs revision":"OK"
-              }));
-              onSendComplete(mocks); setSent(true);
-            }} style={{ fontSize:fs(-1), padding:"5px 12px", background:"#FAEEDA",
-              color:"#7A4A08", border:"1px solid #FAC775", borderRadius:6, cursor:"pointer" }}>
-              ⚠ Mixed responses
-            </button>
-          </div>
-        </div>
-      )}
-
-      <div style={{ display:"flex", gap:8, justifyContent:"flex-end" }}>
-        <button onClick={onClose}
-          style={{ fontSize:fs(), padding:"6px 16px", background:"#f5f5f5",
-            border:"1px solid #ddd", color:"#444", borderRadius:6, cursor:"pointer" }}>
-          Cancel
-        </button>
-        <button onClick={handleSend}
-          style={{ fontSize:fs(), padding:"6px 18px", background:"#1a6fd4", color:"#fff",
-            border:"none", fontWeight:500, borderRadius:6, cursor:"pointer" }}>
-          Log {emailList().length} recipient(s) as pending
-        </button>
+      {/* Grid table */}
+      <div style={{ overflowX:"auto" }}>
+        <table style={{ width:"100%", borderCollapse:"collapse", tableLayout:"fixed",
+          border:"1px solid #ccc", fontSize:fs(-1) }}>
+          <tbody>
+            {rows.map((row, ri) => (
+              <tr key={ri}>
+                {row.map((a, ci) => {
+                  const idx = ri * 10 + ci;
+                  return (
+                    <td key={ci} style={{ border:"1px solid #ccc", padding:"10px 8px",
+                      verticalAlign:"top", width:"10%", background:"#fff" }}>
+                      <div style={{ fontWeight:600, fontSize:fs(-1), color:"#111",
+                        lineHeight:1.3, marginBottom:4 }}>{a.name}</div>
+                      <div style={{ fontSize:10, color:"#555", lineHeight:1.4 }}>{a.title}</div>
+                      {/* Signature space */}
+                      <div style={{ marginTop:10, borderTop:"1px solid #ccc", paddingTop:4,
+                        height:22, fontSize:10, color:"#bbb" }}>Signature</div>
+                      {editMode && (
+                        <button onClick={() => openEdit(idx)}
+                          style={{ marginTop:5, fontSize:10, padding:"2px 8px", borderRadius:4,
+                            background:"#f0f6ff", border:"1px solid #c5daff", color:"#1a6fd4",
+                            cursor:"pointer", width:"100%" }}>
+                          Edit
+                        </button>
+                      )}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
-    </Overlay>
+
+      {/* Edit dialog */}
+      {editing !== null && (
+        <Overlay onClose={() => setEditing(null)}>
+          <div style={{ padding:"20px 22px", minWidth:340 }}>
+            <div style={{ fontSize:fs(2), fontWeight:500, marginBottom:14, color:"#111" }}>
+              Edit Approver #{editing + 1}
+            </div>
+            <label style={{ display:"block", fontSize:fs(-1), color:"#666", marginBottom:3 }}>Name</label>
+            <input
+              autoFocus
+              value={editForm.name}
+              onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))}
+              onKeyDown={e => e.key === "Enter" && confirmEdit()}
+              style={{ width:"100%", boxSizing:"border-box", padding:"7px 9px", fontSize:fs(),
+                border:"1px solid #ccc", borderRadius:6, marginBottom:12, outline:"none" }}
+            />
+            <label style={{ display:"block", fontSize:fs(-1), color:"#666", marginBottom:3 }}>Title / Role</label>
+            <input
+              value={editForm.title}
+              onChange={e => setEditForm(f => ({ ...f, title: e.target.value }))}
+              onKeyDown={e => e.key === "Enter" && confirmEdit()}
+              style={{ width:"100%", boxSizing:"border-box", padding:"7px 9px", fontSize:fs(),
+                border:"1px solid #ccc", borderRadius:6, marginBottom:16, outline:"none" }}
+            />
+            <div style={{ display:"flex", gap:8, justifyContent:"flex-end" }}>
+              <button onClick={() => setEditing(null)}
+                style={{ fontSize:fs(), padding:"6px 14px", background:"#f5f5f5",
+                  border:"1px solid #ddd", borderRadius:6, cursor:"pointer", color:"#555" }}>
+                Cancel
+              </button>
+              <button onClick={confirmEdit}
+                style={{ fontSize:fs(), padding:"6px 18px", background:"#1a6fd4", color:"#fff",
+                  border:"none", borderRadius:6, fontWeight:500, cursor:"pointer" }}>
+                Save
+              </button>
+            </div>
+          </div>
+        </Overlay>
+      )}
+    </div>
   );
 }
+
 
 /* ── Settings Modal ── */
 function SettingsModal({ senderEmail, userName, onSave, onSaveName, onClose }) {
@@ -1036,12 +896,10 @@ function NameModal({ onSave }) {
 
 export default function App() {
   const [reports, setReports] = useState([]);
-  const [approvals, setApprovals] = useState([]);
   const [senderEmail, setSenderEmail] = useState("");
   const [loaded, setLoaded] = useState(false);
   const [tab, setTab] = useState("__summary__");
   const [editTarget, setEditTarget] = useState(null);
-  const [showEmail, setShowEmail] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [userName, setUserName] = useState("");
   const [showNameModal, setShowNameModal] = useState(false);
@@ -1051,7 +909,6 @@ export default function App() {
   // localStorage keys (email + username only — data lives in Supabase)
   const LS_E = "sccc_e_v6";
   const LS_NAME = "sccc_username_v1";
-  const LS_A = "sccc_a_v6";
 
   // Merge Supabase overrides onto RAW baseline
   const applyOverrides = useCallback((overrides) => {
@@ -1076,10 +933,8 @@ export default function App() {
   useEffect(() => {
     const name = localStorage.getItem(LS_NAME) || "";
     const email = localStorage.getItem(LS_E) || "";
-    const savedApprovals = localStorage.getItem(LS_A);
     setUserName(name);
     setSenderEmail(email);
-    setApprovals(savedApprovals ? JSON.parse(savedApprovals) : []);
     if (!name) setShowNameModal(true);
 
     // Fetch current state from Supabase
@@ -1151,10 +1006,6 @@ export default function App() {
     } catch { /* silent — optimistic update already applied */ }
   }, [userName]);
 
-  const pA = useCallback(d => {
-    try { localStorage.setItem(LS_A, JSON.stringify(d)); } catch {}
-  }, []);
-
   const pE = useCallback(v => {
     try { localStorage.setItem(LS_E, v); } catch {}
   }, []);
@@ -1170,7 +1021,6 @@ export default function App() {
 
   const handleSave = async form => {
     if (!form.id) {
-      // New report — local only (no Supabase row needed until status changes)
       setReports(prev => [...prev, { ...form, id: Date.now() }]);
     } else {
       const updated = { ...form, displayName: form.nameEN || form.nameTH, updatedBy: userName, updatedDate: today() };
@@ -1185,11 +1035,6 @@ export default function App() {
 
   const handleDelete = id => {
     setReports(prev => prev.filter(r => r.id !== id));
-  };
-
-  const handleSendComplete = newApprovals => {
-    setApprovals(newApprovals); pA(newApprovals);
-    setShowEmail(false);
   };
 
   const handleSaveSender = email => {
@@ -1249,7 +1094,7 @@ export default function App() {
               border:"1px solid #ddd", color:"#555", borderRadius:6, cursor:"pointer" }}>
             ⚙ Settings
           </button>
-          <button onClick={() => printAll(reports, approvals)}
+          <button onClick={() => printAll(reports)}
             style={{ fontSize:fs(-1), padding:"5px 11px", background:"#f5f5f5",
               border:"1px solid #ddd", color:"#555", borderRadius:6, cursor:"pointer" }}>
             🖨 Print
@@ -1258,12 +1103,6 @@ export default function App() {
             style={{ fontSize:fs(-1), padding:"5px 13px", background:"#1a6fd4", color:"#fff",
               border:"none", fontWeight:500, borderRadius:6, cursor:"pointer" }}>
             + Add report
-          </button>
-          <button onClick={() => setShowEmail(true)}
-            style={{ fontSize:fs(-1), padding:"5px 13px", background:"#fff",
-              border:"1px solid #1a6fd4", color:"#1a6fd4", borderRadius:6,
-              cursor:"pointer", fontWeight:500 }}>
-            Send email ↗
           </button>
         </div>
       </div>
@@ -1283,13 +1122,6 @@ export default function App() {
           </div>
           <span style={{ fontSize:fs(-1), color:"#888" }}>{overallPct}% compliant</span>
         </div>
-        {approvals.length>0 && (
-          <span style={{ marginLeft:"auto", fontSize:fs(-1), color:"#1a4a8a",
-            background:"#f0f6ff", border:"0.5px solid #c5daff",
-            padding:"3px 10px", borderRadius:20 }}>
-            {approvals.filter(a=>a.response==="Approved").length}/{approvals.length} approved
-          </span>
-        )}
       </div>
 
       {/* Tabs */}
@@ -1320,7 +1152,7 @@ export default function App() {
 
       {/* Content */}
       {tab==="__summary__"
-        ? <SummaryView reports={reports} approvals={approvals}/>
+        ? <SummaryView reports={reports}/>
         : <DeptView
             key={tab}
             dept={tab}
@@ -1339,15 +1171,6 @@ export default function App() {
           dept={editTarget?.dept}
           onSave={handleSave}
           onClose={() => setEditTarget(null)}
-        />
-      )}
-      {showEmail && (
-        <EmailModal
-          reports={reports}
-          approvals={approvals}
-          senderEmail={senderEmail}
-          onClose={() => setShowEmail(false)}
-          onSendComplete={handleSendComplete}
         />
       )}
       {showSettings && (
