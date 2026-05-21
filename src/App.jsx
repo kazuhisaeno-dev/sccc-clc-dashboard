@@ -104,7 +104,8 @@ function Overlay({ onClose, children, wide }) {
 }
 
 /* ── Summary ── */
-function SummaryView({ reports }) {
+function SummaryView({ reports, approversRef }) {
+  const [statusFilter, setStatusFilter] = useState(null);
   const deptRows = DEPTS.map(dept => {
     const rs = reports.filter(r => r.dept === dept);
     const c = counts(rs);
@@ -133,16 +134,27 @@ function SummaryView({ reports }) {
         </div>
       </div>
 
-      {/* KPI cards */}
+      {/* KPI cards — clickable to filter */}
       <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:10, marginBottom:18 }}>
         {ST.map(s => {
           const st = SC[s]; const n = totals[s];
+          const active = statusFilter === s;
           return (
-            <div key={s} style={{ background:st.bg, border:`1px solid ${st.bd}`, borderRadius:12, padding:"12px 14px" }}>
+            <div key={s} onClick={() => setStatusFilter(active ? null : s)}
+              style={{ background:st.bg, border:`2px solid ${active ? st.c : st.bd}`,
+                borderRadius:12, padding:"12px 14px", cursor:"pointer",
+                boxShadow: active ? `0 0 0 3px ${st.c}30` : "none",
+                transform: active ? "translateY(-1px)" : "none",
+                transition:"all .15s" }}>
               <div style={{ fontSize:28, fontWeight:500, color:st.c, lineHeight:1 }}>{n}</div>
               <div style={{ fontSize:fs(-1), color:st.c, marginTop:4, opacity:.85 }}>{s}</div>
               {s==="No activities" && (
                 <div style={{ fontSize:10, color:st.c, opacity:.6, marginTop:1 }}>counted as On-Track</div>
+              )}
+              {active && (
+                <div style={{ fontSize:9, color:st.c, marginTop:4, fontWeight:600 }}>
+                  ▼ Showing filtered list
+                </div>
               )}
             </div>
           );
@@ -215,14 +227,72 @@ function SummaryView({ reports }) {
         </table>
       </div>
 
+      {/* Filtered report list when a status card is clicked */}
+      {statusFilter && (() => {
+        const filtered = reports.filter(r => r.status === statusFilter);
+        const st = SC[statusFilter];
+        return (
+          <div style={{ marginTop:18 }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
+              <div style={{ fontSize:fs(1), fontWeight:500, color:"#111" }}>
+                <span style={{ display:"inline-block", padding:"2px 10px", borderRadius:10,
+                  background:st.bg, color:st.c, border:`1px solid ${st.bd}`, marginRight:8,
+                  fontSize:fs(-1), fontWeight:600 }}>{statusFilter}</span>
+                {filtered.length} report{filtered.length !== 1 ? "s" : ""}
+              </div>
+              <button onClick={() => setStatusFilter(null)}
+                style={{ fontSize:fs(-1), padding:"3px 10px", borderRadius:6, cursor:"pointer",
+                  background:"#f5f5f5", border:"1px solid #ddd", color:"#555" }}>
+                Clear filter ×
+              </button>
+            </div>
+            <div style={cardBase}>
+              <table style={{ width:"100%", borderCollapse:"collapse", fontSize:fs() }}>
+                <thead>
+                  <tr>
+                    {["#","Report Name","Department","Frequency","Deadline","Responsible","Updated","Remark"].map(h => (
+                      <th key={h} style={{ ...thStyle, textAlign:"left" }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((r, i) => (
+                    <tr key={r.id} style={{ background: i%2===0 ? "#fff" : "#fafaf8",
+                      borderBottom:"0.5px solid #ebebeb" }}>
+                      <td style={{ ...tdStyle, color:"#aaa", width:28 }}>{i+1}</td>
+                      <td style={{ ...tdStyle }}>
+                        <div style={{ fontWeight:500 }}>{r.displayName || r.nameEN || r.nameTH}</div>
+                        {r.nameTH && r.nameTH !== (r.displayName||r.nameEN) &&
+                          <div style={{ fontSize:fs(-2), color:"#888" }}>{r.nameTH}</div>}
+                        {r.remark && <div style={{ fontSize:fs(-2), color:"#888", marginTop:2,
+                          fontStyle:"italic" }}>{r.remark}</div>}
+                      </td>
+                      <td style={{ ...tdStyle, color:"#555" }}>{DEPT_SHORT[r.dept]||r.dept}</td>
+                      <td style={{ ...tdStyle, color:"#666" }}>{r.frequency||"—"}</td>
+                      <td style={{ ...tdStyle, color:"#666" }}>{r.deadline||"—"}</td>
+                      <td style={{ ...tdStyle, color:"#666" }}>{r.responsible||"—"}</td>
+                      <td style={{ ...tdStyle, color:"#888", fontSize:fs(-1) }}>
+                        {r.updatedDate||"—"}
+                        {r.updatedBy && <div style={{ color:"#1a6fd4", fontSize:fs(-2) }}>{r.updatedBy}</div>}
+                      </td>
+                      <td style={{ ...tdStyle, color:"#666", maxWidth:160 }}>{r.remark||"—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Approver List */}
-      <ApproverGrid />
+      <ApproverGrid approversRef={approversRef} />
     </div>
   );
 }
 
 /* ── Print All ── */
-function printAll(reports) {
+function printAll(reports, approvers) {
   const ts = new Date().toLocaleString("en-GB", {
     day:"2-digit", month:"short", year:"numeric", hour:"2-digit", minute:"2-digit"
   });
@@ -372,6 +442,29 @@ function printAll(reports) {
   </div>
 
   ${deptSections}
+
+  <div style="page-break-before:always;padding-top:18px;">
+    <div style="font-size:15px;font-weight:600;color:#111;margin-bottom:10px;">Approver List (${(approvers||[]).length} approvers)</div>
+    ${(() => {
+      const COLS = 10;
+      const list = approvers || [];
+      const rows = [];
+      for (let i = 0; i < list.length; i += COLS) rows.push(list.slice(i, i + COLS));
+      const colPct = (100/COLS).toFixed(1);
+      return rows.map(row => `
+        <table style="width:100%;border-collapse:collapse;table-layout:fixed;border:1px solid #ccc;margin-bottom:-1px;">
+          <tr>
+            ${row.map(a => `
+              <td style="border:1px solid #ccc;padding:8px 7px;vertical-align:top;width:${colPct}%;">
+                <div style="font-weight:600;font-size:10px;color:#111;line-height:1.3;margin-bottom:3px;">${a.name||'—'}</div>
+                <div style="font-size:9px;color:#555;line-height:1.3;">${a.title||''}</div>
+                <div style="margin-top:10px;border-top:1px solid #ccc;height:20px;font-size:9px;color:#bbb;padding-top:2px;">Signature</div>
+              </td>`).join('')}
+            ${row.length < COLS ? Array(COLS - row.length).fill('<td style="border:1px solid #eee;background:#fafaf8;"></td>').join('') : ''}
+          </tr>
+        </table>`).join('');
+    })()}
+  </div>
 </body>
 </html>`;
 
@@ -485,16 +578,21 @@ const DEFAULT_APPROVERS = [
 
 const LS_APPROVERS = "sccc_approvers_v1";
 
-function ApproverGrid() {
+function ApproverGrid({ approversRef }) {
   const [approvers, setApprovers] = useState(() => {
     try {
       const s = localStorage.getItem(LS_APPROVERS);
       return s ? JSON.parse(s) : DEFAULT_APPROVERS.map(a => ({ ...a }));
     } catch { return DEFAULT_APPROVERS.map(a => ({ ...a })); }
   });
-  const [editing, setEditing] = useState(null); // index or null
+  const [editing, setEditing] = useState(null);
   const [editForm, setEditForm] = useState({ name:"", title:"" });
   const [editMode, setEditMode] = useState(false);
+
+  // Expose current approvers to parent (for print)
+  useEffect(() => {
+    if (approversRef) approversRef.current = approvers;
+  }, [approvers, approversRef]);
 
   const save = (updated) => {
     setApprovers(updated);
@@ -503,102 +601,128 @@ function ApproverGrid() {
 
   const openEdit = (i) => {
     setEditing(i);
-    setEditForm({ name: approvers[i].name, title: approvers[i].title });
+    setEditForm({ name: approvers[i]?.name || "", title: approvers[i]?.title || "" });
   };
 
   const confirmEdit = () => {
     if (editing === null) return;
     const updated = approvers.map((a, i) => i === editing ? { ...editForm } : a);
+    save(updated); setEditing(null);
+  };
+
+  const addApprover = () => {
+    const updated = [...approvers, { name:"", title:"" }];
     save(updated);
-    setEditing(null);
+    setEditing(updated.length - 1);
+    setEditForm({ name:"", title:"" });
   };
 
-  const resetDefaults = () => {
-    save(DEFAULT_APPROVERS.map(a => ({ ...a })));
-  };
+  const removeApprover = (i) => save(approvers.filter((_, idx) => idx !== i));
+  const resetDefaults = () => save(DEFAULT_APPROVERS.map(a => ({ ...a })));
 
-  // 10 columns, 2 rows
-  const rows = [approvers.slice(0, 10), approvers.slice(10, 20)];
+  const COLS = 10;
+  const gridRows = [];
+  for (let i = 0; i < approvers.length; i += COLS) gridRows.push(approvers.slice(i, i + COLS));
 
   return (
     <div style={{ marginTop:24 }}>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
-        <div style={{ fontSize:fs(1), fontWeight:500, color:"#111" }}>Approver List</div>
+        <div style={{ fontSize:fs(1), fontWeight:500, color:"#111" }}>
+          Approver List
+          <span style={{ fontSize:fs(-2), fontWeight:400, color:"#888", marginLeft:8 }}>
+            {approvers.length} approver{approvers.length !== 1 ? "s" : ""}
+          </span>
+        </div>
         <div style={{ display:"flex", gap:6 }}>
-          <button
-            onClick={() => setEditMode(e => !e)}
+          {editMode && (
+            <>
+              <button onClick={addApprover}
+                style={{ fontSize:fs(-1), padding:"4px 12px", borderRadius:6, cursor:"pointer",
+                  background:"#EAF3DE", border:"1px solid #c0dba0", color:"#2D5A0E", fontWeight:500 }}>
+                + Add approver
+              </button>
+              <button onClick={resetDefaults}
+                style={{ fontSize:fs(-1), padding:"4px 11px", borderRadius:6, cursor:"pointer",
+                  background:"#fff", border:"1px solid #ddd", color:"#888" }}>
+                Reset defaults
+              </button>
+            </>
+          )}
+          <button onClick={() => setEditMode(e => !e)}
             style={{ fontSize:fs(-1), padding:"4px 12px", borderRadius:6, cursor:"pointer",
               background: editMode ? "#1a6fd4" : "#f5f5f5",
               color: editMode ? "#fff" : "#555",
               border: editMode ? "none" : "1px solid #ddd", fontWeight:500 }}>
-            {editMode ? "✓ Done editing" : "✏ Edit names"}
+            {editMode ? "✓ Done" : "✏ Edit"}
           </button>
-          {editMode && (
-            <button onClick={resetDefaults}
-              style={{ fontSize:fs(-1), padding:"4px 11px", borderRadius:6, cursor:"pointer",
-                background:"#fff", border:"1px solid #ddd", color:"#888" }}>
-              Reset to default
-            </button>
-          )}
         </div>
       </div>
 
-      {/* Grid table */}
       <div style={{ overflowX:"auto" }}>
         <table style={{ width:"100%", borderCollapse:"collapse", tableLayout:"fixed",
           border:"1px solid #ccc", fontSize:fs(-1) }}>
           <tbody>
-            {rows.map((row, ri) => (
+            {gridRows.map((row, ri) => (
               <tr key={ri}>
                 {row.map((a, ci) => {
-                  const idx = ri * 10 + ci;
+                  const idx = ri * COLS + ci;
                   return (
                     <td key={ci} style={{ border:"1px solid #ccc", padding:"10px 8px",
-                      verticalAlign:"top", width:"10%", background:"#fff" }}>
+                      verticalAlign:"top", width:`${100/COLS}%`, background:"#fff", position:"relative" }}>
+                      {editMode && (
+                        <button onClick={() => removeApprover(idx)} title="Remove"
+                          style={{ position:"absolute", top:3, right:3, width:16, height:16,
+                            borderRadius:"50%", background:"#fee", border:"1px solid #fcc",
+                            color:"#c33", fontSize:9, lineHeight:"15px", textAlign:"center",
+                            cursor:"pointer", padding:0 }}>×</button>
+                      )}
                       <div style={{ fontWeight:600, fontSize:fs(-1), color:"#111",
-                        lineHeight:1.3, marginBottom:4 }}>{a.name}</div>
+                        lineHeight:1.3, marginBottom:4, paddingRight: editMode ? 18 : 0 }}>
+                        {a.name || <span style={{color:"#bbb",fontStyle:"italic"}}>—</span>}
+                      </div>
                       <div style={{ fontSize:10, color:"#555", lineHeight:1.4 }}>{a.title}</div>
-                      {/* Signature space */}
                       <div style={{ marginTop:10, borderTop:"1px solid #ccc", paddingTop:4,
                         height:22, fontSize:10, color:"#bbb" }}>Signature</div>
                       {editMode && (
                         <button onClick={() => openEdit(idx)}
                           style={{ marginTop:5, fontSize:10, padding:"2px 8px", borderRadius:4,
                             background:"#f0f6ff", border:"1px solid #c5daff", color:"#1a6fd4",
-                            cursor:"pointer", width:"100%" }}>
-                          Edit
-                        </button>
+                            cursor:"pointer", width:"100%" }}>Edit</button>
                       )}
                     </td>
                   );
                 })}
+                {ri === gridRows.length - 1 && row.length < COLS &&
+                  Array(COLS - row.length).fill(null).map((_, ei) => (
+                    <td key={`e${ei}`} style={{ border:"1px solid #eee", background:"#fafaf8",
+                      width:`${100/COLS}%` }}/>
+                  ))
+                }
               </tr>
             ))}
           </tbody>
         </table>
       </div>
 
-      {/* Edit dialog */}
       {editing !== null && (
         <Overlay onClose={() => setEditing(null)}>
           <div style={{ padding:"20px 22px", minWidth:340 }}>
             <div style={{ fontSize:fs(2), fontWeight:500, marginBottom:14, color:"#111" }}>
-              Edit Approver #{editing + 1}
+              {editing < approvers.length ? `Edit Approver #${editing + 1}` : "Add Approver"}
             </div>
-            <label style={{ display:"block", fontSize:fs(-1), color:"#666", marginBottom:3 }}>Name</label>
-            <input
-              autoFocus
-              value={editForm.name}
+            <label style={{ display:"block", fontSize:fs(-1), color:"#666", marginBottom:3 }}>Full name</label>
+            <input autoFocus value={editForm.name}
               onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))}
               onKeyDown={e => e.key === "Enter" && confirmEdit()}
+              placeholder="e.g. Khun Somchai Jaidee"
               style={{ width:"100%", boxSizing:"border-box", padding:"7px 9px", fontSize:fs(),
                 border:"1px solid #ccc", borderRadius:6, marginBottom:12, outline:"none" }}
             />
             <label style={{ display:"block", fontSize:fs(-1), color:"#666", marginBottom:3 }}>Title / Role</label>
-            <input
-              value={editForm.title}
+            <input value={editForm.title}
               onChange={e => setEditForm(f => ({ ...f, title: e.target.value }))}
               onKeyDown={e => e.key === "Enter" && confirmEdit()}
+              placeholder="e.g. Head of Compliance"
               style={{ width:"100%", boxSizing:"border-box", padding:"7px 9px", fontSize:fs(),
                 border:"1px solid #ccc", borderRadius:6, marginBottom:16, outline:"none" }}
             />
@@ -905,6 +1029,7 @@ export default function App() {
   const [showNameModal, setShowNameModal] = useState(false);
   const [liveStatus, setLiveStatus] = useState("connecting"); // "connecting" | "live" | "error"
   const channelRef = useRef(null);
+  const approversRef = useRef([]);
 
   // localStorage keys (email + username only — data lives in Supabase)
   const LS_E = "sccc_e_v6";
@@ -1094,7 +1219,7 @@ export default function App() {
               border:"1px solid #ddd", color:"#555", borderRadius:6, cursor:"pointer" }}>
             ⚙ Settings
           </button>
-          <button onClick={() => printAll(reports)}
+          <button onClick={() => printAll(reports, approversRef.current)}
             style={{ fontSize:fs(-1), padding:"5px 11px", background:"#f5f5f5",
               border:"1px solid #ddd", color:"#555", borderRadius:6, cursor:"pointer" }}>
             🖨 Print
@@ -1152,7 +1277,7 @@ export default function App() {
 
       {/* Content */}
       {tab==="__summary__"
-        ? <SummaryView reports={reports}/>
+        ? <SummaryView reports={reports} approversRef={approversRef}/>
         : <DeptView
             key={tab}
             dept={tab}
